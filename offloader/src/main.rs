@@ -6,6 +6,7 @@ use kube::ResourceExt;
 
 const POD_NAME: &str = "calvin-offloader-pod";
 const CONTAINER_NAME: &str = "calvin-offloader-container";
+const CONTAINER_CONFIGWRITE_NAME: &str = "calvin-offloader-configwrite-container";
 const IMAGE_NAME: &str = "calvin-remote-1:latest";
 
 async fn create_pod() -> Result<(), Box<dyn std::error::Error>> {
@@ -49,11 +50,39 @@ async fn create_job() -> Result<(), Box<dyn std::error::Error>> {
         "spec": {
             "template": {
                 "spec": {
-                    "containers": [{
-                        "name": CONTAINER_NAME,
-                        "image": IMAGE_NAME,
-                        "imagePullPolicy": "Never",
-                    }],
+                    "volumes": [
+                        {
+                            "name": "config-volume",
+                            "emptyDir": {}
+                        }
+                    ],
+                    "initContainers": [
+                        {
+                            "name": CONTAINER_CONFIGWRITE_NAME,
+                            "image": IMAGE_NAME,
+                            "command": ["sh", "-c", "echo 'Configuration written' > /config/config.txt"],
+                            "volumeMounts" : [
+                                {
+                                    "name": "config-volume",
+                                    "mountPath": "/config"
+                                }
+                            ],
+                            "imagePullPolicy": "Never",
+                        }
+                    ],
+                    "containers": [
+                        {
+                            "name": CONTAINER_NAME,
+                            "image": IMAGE_NAME,
+                            "volumeMounts" : [
+                                {
+                                    "name": "config-volume",
+                                    "mountPath": "/config"
+                                }
+                            ],
+                            "imagePullPolicy": "Never",
+                        }
+                    ],
                     "restartPolicy": "Never"
                 }
             },
@@ -69,6 +98,10 @@ async fn create_job() -> Result<(), Box<dyn std::error::Error>> {
     println!("Created job: {:?}", created_job.metadata.name);
 
     Ok(())
+}
+
+pub mod remote_worker_pb {
+    include!("protos/remote_worker.rs");
 }
 
 fn main() {
